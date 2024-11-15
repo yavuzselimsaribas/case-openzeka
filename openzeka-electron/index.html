@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Electron WebRTC Interface</title>
+</head>
+<body>
+<h1>Electron WebRTC Interface</h1>
+<button id="getCameras">Get Camera List</button>
+<button id="startCamera">Start Camera</button>
+<button id="stopCamera">Stop Camera</button>
+<button id="startScreenShare">Start Screen Share</button>
+<button id="stopStream">Stop Stream</button>
+
+
+<h2>Camera List</h2>
+<ul id="cameraList"></ul>
+
+<h2>Live Stream</h2>
+<video id="liveFeed" autoplay playsinline style="width: 100%; max-width: 600px; border: 1px solid #ccc;"></video>
+
+<script src="./renderer.js"></script>
+</body>
+</html>
