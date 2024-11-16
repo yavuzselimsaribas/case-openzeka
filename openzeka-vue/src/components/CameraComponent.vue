@@ -32,13 +32,13 @@
 
 <script lang="ts">
 import { defineComponent, onMounted, ref } from 'vue';
-import { getWebRTCClient } from '@/service/signaling';
+import {WebRTCClient} from "@/service/signaling";
 import { nextTick } from 'vue';
 
 export default defineComponent({
   name: 'CameraComponent',
   setup() {
-    const webrtcClient = ref<ReturnType<typeof getWebRTCClient> | null>(null);
+    const webrtcClient = ref<WebRTCClient | null>(null);
     const cameras = ref<Array<{ deviceId: string; label: string }>>([]);
     const selectedCamera = ref<string>('');
     const videoElement = ref<HTMLVideoElement | null>(null);
@@ -70,7 +70,7 @@ export default defineComponent({
         console.error('Video element for camera not found');
       }
 
-      webrtcClient.value = getWebRTCClient();
+      webrtcClient.value = new WebRTCClient('ws://localhost:8080', 'camera');
 
       // Set the callback for camera stream
       webrtcClient.value.onRemoteStream = ((stream: MediaStream) => {

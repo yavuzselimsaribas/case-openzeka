@@ -5,7 +5,7 @@ wss.on('connection', (ws) => {
     console.log('Client connected with IP:', ws._socket.remoteAddress);
     ws.on('message', (message) => {
         // Convert message to a string to ensure JSON format is sent
-        const messageString = message.toString();
+        const messageString = Buffer.from(message).toString('utf8');
         console.log('Broadcasting message:', messageString);
 
         // Broadcast to all clients except the sender

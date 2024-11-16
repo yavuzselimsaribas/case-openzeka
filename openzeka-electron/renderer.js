@@ -1,30 +1,32 @@
 // renderer.js
 
 (async function() {
-    let peerConnection = null;
-    let localStream = null;
+    let peerConnections = {};
+    let localStreams = {};
     const configuration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
-    function initPeerConnection() {
-        peerConnection = new RTCPeerConnection(configuration);
+    function initPeerConnection(id) {
+        const peerConnection = new RTCPeerConnection(configuration);
 
         peerConnection.onicecandidate = ({ candidate }) => {
             if (candidate) {
-                console.log('Sending ICE candidate from renderer to main:', candidate);
-                // Serialize the ICE candidate to send through IPC
+                console.log(`Sending ICE candidate from renderer to main for ${id}:`, candidate);
                 const candidateObject = {
                     candidate: candidate.candidate,
                     sdpMLineIndex: candidate.sdpMLineIndex,
                     sdpMid: candidate.sdpMid,
                     usernameFragment: candidate.usernameFragment,
                 };
-                window.electronAPI.sendSignalingMessage({ type: 'ice-candidate', candidate: candidateObject });
+                window.electronAPI.sendSignalingMessage({ type: 'ice-candidate', id, candidate: candidateObject });
             }
         };
 
         peerConnection.onconnectionstatechange = () => {
-            console.log('Peer connection state:', peerConnection.connectionState);
+            console.log(`Peer connection state for ${id}:`, peerConnection.connectionState);
         };
+
+        // Store the peer connection in the peerConnections object
+        peerConnections[id] = peerConnection;
     }
 
     async function getCameraList() {
@@ -46,26 +48,28 @@
     }
 
     async function startCamera(deviceId) {
+        const id = 'camera'; // Unique identifier for the camera stream
         try {
-            localStream = await navigator.mediaDevices.getUserMedia({
+            localStreams[id] = await navigator.mediaDevices.getUserMedia({
                 video: { deviceId: { exact: deviceId } },
                 audio: false,
             });
 
-            initPeerConnection();
+            initPeerConnection(id);
 
-            localStream.getTracks().forEach((track) => {
-                console.log('Adding track to peer connection:', track);
-                peerConnection.addTrack(track, localStream);
+            localStreams[id].getTracks().forEach((track) => {
+                console.log(`Adding track to peer connection ${id}:`, track);
+                peerConnections[id].addTrack(track, localStreams[id]);
             });
 
-            const offer = await peerConnection.createOffer();
-            await peerConnection.setLocalDescription(offer);
+            const offer = await peerConnections[id].createOffer();
+            await peerConnections[id].setLocalDescription(offer);
 
-            console.log('Sending offer:', peerConnection.localDescription);
+            console.log(`Sending offer for ${id}:`, peerConnections[id].localDescription);
             window.electronAPI.sendSignalingMessage({
                 type: 'offer',
-                sdp: peerConnection.localDescription.sdp
+                id: id,
+                sdp: peerConnections[id].localDescription.sdp
             });
         } catch (error) {
             console.error('Error starting camera:', error);
@@ -73,17 +77,19 @@
     }
 
     async function stopCamera() {
-        if (localStream) {
-            localStream.getTracks().forEach(track => track.stop());
-            localStream = null;
+        const id = 'camera';
+        if (localStreams[id]) {
+            localStreams[id].getTracks().forEach(track => track.stop());
+            delete localStreams[id];
         }
-        if (peerConnection) {
-            peerConnection.close();
-            peerConnection = null;
+        if (peerConnections[id]) {
+            peerConnections[id].close();
+            delete peerConnections[id];
         }
     }
 
     async function startScreenShare(screenId) {
+        const id = 'screen'; // Unique identifier for the screen share
         try {
             const sources = await window.electronAPI.invoke('get-sources');
             const source = sources.find(s => s.id === screenId);
@@ -92,7 +98,7 @@
                 return;
             }
 
-            localStream = await navigator.mediaDevices.getUserMedia({
+            localStreams[id] = await navigator.mediaDevices.getUserMedia({
                 audio: false,
                 video: {
                     mandatory: {
@@ -102,16 +108,18 @@
                 },
             });
 
-            initPeerConnection();
+            initPeerConnection(id);
 
-            localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+            localStreams[id].getTracks().forEach(track => peerConnections[id].addTrack(track, localStreams[id]));
 
-            const offer = await peerConnection.createOffer();
-            await peerConnection.setLocalDescription(offer);
+            const offer = await peerConnections[id].createOffer();
+            await peerConnections[id].setLocalDescription(offer);
 
+            console.log(`Sending offer for ${id}:`, peerConnections[id].localDescription);
             window.electronAPI.sendSignalingMessage({
                 type: 'offer',
-                sdp: peerConnection.localDescription.sdp
+                id: id,
+                sdp: peerConnections[id].localDescription.sdp
             });
         } catch (error) {
             console.error('Error starting screen share:', error);
@@ -119,17 +127,24 @@
     }
 
     async function stopScreenShare() {
-        if (localStream) {
-            localStream.getTracks().forEach(track => track.stop());
-            localStream = null;
+        const id = 'screen';
+        if (localStreams[id]) {
+            localStreams[id].getTracks().forEach(track => track.stop());
+            delete localStreams[id];
         }
-        if (peerConnection) {
-            peerConnection.close();
-            peerConnection = null;
+        if (peerConnections[id]) {
+            peerConnections[id].close();
+            delete peerConnections[id];
         }
     }
 
     async function handleSignalingMessage(data) {
+        const id = data.id; // Get the identifier from the signaling message
+        if (!id) {
+            console.error('No id in signaling message');
+            return;
+        }
+
         if (data.type === 'get-cameras') {
             await getCameraList();
         } else if (data.type === 'get-screens') {
@@ -143,36 +158,37 @@
         } else if (data.type === 'stop-screen-share') {
             await stopScreenShare();
         } else if (data.type === 'answer') {
-            if (peerConnection) {
+            if (peerConnections[id]) {
                 try {
-                    console.log('Received answer:', data.sdp);
-                    //create RTCSessionDescriptionInit object from received sdp
-                    //and set it as remote description
+                    console.log(`Received answer for ${id}:`, data.sdp);
                     const answerDescription = {
                         type: 'answer',
                         sdp: data.sdp,
                     };
 
-                    console.log('Peer connection state in answer part:', peerConnection.signalingState);
+                    console.log(`Peer connection state for ${id} in answer part:`, peerConnections[id].signalingState);
 
-                    if (peerConnection.signalingState === 'have-local-offer') {
-                        await peerConnection.setRemoteDescription(new RTCSessionDescription(answerDescription));
+                    if (peerConnections[id].signalingState === 'have-local-offer') {
+                        await peerConnections[id].setRemoteDescription(new RTCSessionDescription(answerDescription));
                     } else {
-                        console.error('Invalid signaling state for setting remote description:', peerConnection.signalingState);
+                        console.error(`Invalid signaling state for setting remote description for ${id}:`, peerConnections[id].signalingState);
                     }
+                } catch (e) {
+                    console.error(`Error setting remote description for ${id}`, e);
                 }
-                catch (e) {
-                    console.error('Error setting remote description', e);
-                }
+            } else {
+                console.error(`No peer connection found for ${id} when receiving answer`);
             }
         } else if (data.type === 'ice-candidate') {
-            if (data.candidate && peerConnection) {
+            if (data.candidate && peerConnections[id]) {
                 try {
-                    console.log('Adding ICE candidate:', data.candidate);
-                    await peerConnection.addIceCandidate(data.candidate);
+                    console.log(`Adding ICE candidate for ${id}:`, data.candidate);
+                    await peerConnections[id].addIceCandidate(data.candidate);
                 } catch (e) {
-                    console.error('Error adding received ICE candidate', e);
+                    console.error(`Error adding received ICE candidate for ${id}`, e);
                 }
+            } else {
+                console.error(`No peer connection found for ${id} when adding ICE candidate`);
             }
         } else if (data.type === 'mouse-move') {
             // Forward remote control commands to main process

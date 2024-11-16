@@ -1,20 +1,19 @@
-let webRTCClientInstance: WebRTCClient | null = null;
-
-class WebRTCClient {
+export class WebRTCClient {
     signalingServer: WebSocket;
     peerConnection!: RTCPeerConnection;
-    localStream: MediaStream | null = null;
     remoteStream: MediaStream | null = null;
     onRemoteStream: ((stream: MediaStream) => void) | null = null;
     onCameraList: ((cameras: Array<{ deviceId: string; label: string }>) => void) | null = null;
     onScreenList: ((screens: Array<{ id: string; name: string }>) => void) | null = null;
+    id: string;
 
-    constructor(signalingServerUrl: string) {
+    constructor(signalingServerUrl: string, id: string) {
+        this.id = id;
         this.signalingServer = new WebSocket(signalingServerUrl);
 
         this.signalingServer.onmessage = this.handleSignalingMessage.bind(this);
         this.signalingServer.onopen = () => {
-            console.log('Connected to signaling server');
+            console.log('Connected to signaling server with id ' + this.id);
         };
 
         this.createPeerConnection();
@@ -25,16 +24,16 @@ class WebRTCClient {
 
         this.peerConnection.onicecandidate = (event) => {
             if (event.candidate) {
-                this.signalingServer.send(JSON.stringify({ type: 'ice-candidate', candidate: event.candidate }));
+                this.signalingServer.send(JSON.stringify({ type: 'ice-candidate', id: this.id, candidate: event.candidate }));
             }
         };
 
         this.peerConnection.ontrack = (event) => {
-            console.log('Received remote track:', event.track);
+            console.log(`Received remote track for ${this.id}:`, event.track);
             if (!this.remoteStream) {
                 this.remoteStream = new MediaStream();
                 if (this.onRemoteStream) {
-                    console.log('Initializing remote stream');
+                    console.log(`Initializing remote stream for ${this.id}`);
                     this.onRemoteStream(this.remoteStream);
                 }
             }
@@ -44,6 +43,7 @@ class WebRTCClient {
 
     async handleSignalingMessage(messageEvent: MessageEvent) {
         const data = JSON.parse(messageEvent.data);
+        if (data.id !== undefined && data.id !== this.id) return;
         if (data.type === 'offer') {
             console.log('Received offer with data:', data);
             await this.handleOffer(data.sdp);
@@ -54,10 +54,12 @@ class WebRTCClient {
                 await this.peerConnection.addIceCandidate(candidate);
             }
         } else if (data.type === 'camera-list') {
+            console.log('Received camera list:', data.cameras);
             if (this.onCameraList) {
                 this.onCameraList(data.cameras);
             }
         } else if (data.type === 'screen-list') {
+            console.log('Received screen list:', data.screens);
             if (this.onScreenList) {
                 this.onScreenList(data.screens);
             }
@@ -71,49 +73,44 @@ class WebRTCClient {
         const answer = await this.peerConnection.createAnswer();
         await this.peerConnection.setLocalDescription(answer);
 
-        this.signalingServer.send(JSON.stringify({ type: 'answer', sdp: this.peerConnection.localDescription?.sdp }));
+        this.signalingServer.send(JSON.stringify({ type: 'answer', id: this.id, sdp: this.peerConnection.localDescription?.sdp }));
     }
 
+// In your WebRTCClient class
+
     requestCameraList() {
-        this.signalingServer.send(JSON.stringify({ type: 'get-cameras' }));
+        this.signalingServer.send(JSON.stringify({ type: 'get-cameras', id: this.id }));
     }
 
     requestScreenList() {
-        this.signalingServer.send(JSON.stringify({ type: 'get-screens' }));
+        this.signalingServer.send(JSON.stringify({ type: 'get-screens', id: this.id }));
     }
 
     startCamera(deviceId: string) {
-        this.signalingServer.send(JSON.stringify({ type: 'start-camera', deviceId }));
+        this.signalingServer.send(JSON.stringify({ type: 'start-camera', id: this.id, deviceId }));
     }
 
     stopCamera() {
-        this.signalingServer.send(JSON.stringify({ type: 'stop-camera' }));
+        this.signalingServer.send(JSON.stringify({ type: 'stop-camera', id: this.id }));
     }
 
     startScreenShare(screenId: string) {
-        this.signalingServer.send(JSON.stringify({ type: 'start-screen-share', screenId }));
+        this.signalingServer.send(JSON.stringify({ type: 'start-screen-share', id: this.id, screenId }));
     }
 
     stopScreenShare() {
-        this.signalingServer.send(JSON.stringify({ type: 'stop-screen-share' }));
+        this.signalingServer.send(JSON.stringify({ type: 'stop-screen-share', id: this.id }));
     }
 
     sendMouseMove(x: number, y: number) {
-        this.signalingServer.send(JSON.stringify({ type: 'mouse-move', x, y }));
+        this.signalingServer.send(JSON.stringify({ type: 'mouse-move', id: this.id, x, y }));
     }
 
     sendMouseClick(button: string) {
-        this.signalingServer.send(JSON.stringify({ type: 'mouse-click', button }));
+        this.signalingServer.send(JSON.stringify({ type: 'mouse-click', id: this.id, button }));
     }
 
     sendKeyPress(key: string) {
-        this.signalingServer.send(JSON.stringify({ type: 'key-press', key }));
+        this.signalingServer.send(JSON.stringify({ type: 'key-press', id: this.id, key }));
     }
-}
-
-export function getWebRTCClient() {
-    if (!webRTCClientInstance) {
-        webRTCClientInstance = new WebRTCClient('ws://localhost:8080');
-    }
-    return webRTCClientInstance;
 }

@@ -37,7 +37,8 @@ function connectToSignalingServer() {
     };
 
     signalingServer.onmessage = (message) => {
-        const data = JSON.parse(message.data);
+        const messageString = Buffer.from(message.data).toString('utf-8');
+        const data = JSON.parse(messageString);
         console.log('Received signaling message:', data);
 
         // Forward the message to the renderer process
