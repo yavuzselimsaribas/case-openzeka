@@ -1,120 +1,189 @@
-const ipcRenderer = window.electron.ipcRenderer;
+// renderer.js
 
-document.getElementById('getCameras').addEventListener('click', async () => {
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    const videoDevices = devices.filter(device => device.kind === 'videoinput');
-    const cameraList = document.getElementById('cameraList');
-    cameraList.innerHTML = '';
+(async function() {
+    let peerConnection = null;
+    let localStream = null;
+    const configuration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
-    videoDevices.forEach(camera => {
-        const listItem = document.createElement('li');
+    function initPeerConnection() {
+        peerConnection = new RTCPeerConnection(configuration);
 
-        const radioInput = document.createElement('input');
-        radioInput.type = 'radio';
-        radioInput.name = 'camera';
-        radioInput.value = camera.deviceId;
+        peerConnection.onicecandidate = ({ candidate }) => {
+            if (candidate) {
+                console.log('Sending ICE candidate from renderer to main:', candidate);
+                // Serialize the ICE candidate to send through IPC
+                const candidateObject = {
+                    candidate: candidate.candidate,
+                    sdpMLineIndex: candidate.sdpMLineIndex,
+                    sdpMid: candidate.sdpMid,
+                    usernameFragment: candidate.usernameFragment,
+                };
+                window.electronAPI.sendSignalingMessage({ type: 'ice-candidate', candidate: candidateObject });
+            }
+        };
 
-        const label = document.createElement('label');
-        label.textContent = camera.label || `Camera ${camera.deviceId}`;
-        label.style.marginLeft = '8px';
-
-        listItem.appendChild(radioInput);
-        listItem.appendChild(label);
-        cameraList.appendChild(listItem);
-    });
-});
-
-document.getElementById('startCamera').addEventListener('click', async () => {
-    const selectedCamera = document.querySelector('input[name="camera"]:checked');
-    if (!selectedCamera) {
-        alert('Please select a camera first.');
-        return;
+        peerConnection.onconnectionstatechange = () => {
+            console.log('Peer connection state:', peerConnection.connectionState);
+        };
     }
 
-    const deviceId = selectedCamera.value;
-    document.getElementById('liveFeed').srcObject = await navigator.mediaDevices.getUserMedia({video: {deviceId: {exact: deviceId}}});
-});
-
-document.getElementById('stopCamera').addEventListener('click', () => {
-    const stream = document.getElementById('liveFeed').srcObject;
-    if (stream) {
-        stream.getTracks().forEach(track => track.stop());
+    async function getCameraList() {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const cameras = devices.filter(device => device.kind === 'videoinput').map(device => ({
+            deviceId: device.deviceId,
+            label: device.label || `Camera ${device.deviceId}`,
+        }));
+        window.electronAPI.sendSignalingMessage({ type: 'camera-list', cameras });
     }
-    document.getElementById('liveFeed').srcObject = null;
-});
 
-document.getElementById('startScreenShare').addEventListener('click', async () => {
-    try {
-        // Request screen sources from the main process
-        const sources = await ipcRenderer.invoke('get-sources');
-        console.log('Screen sources:', sources);
+    async function getScreenList() {
+        const sources = await window.electronAPI.invoke('get-sources');
+        const screens = sources.map(source => ({
+            id: source.id,
+            name: source.name,
+        }));
+        window.electronAPI.sendSignalingMessage({ type: 'screen-list', screens });
+    }
 
-        // Display sources as options
-        const sourceList = document.createElement('ul');
-        sourceList.id = 'sourceList';
-        document.body.appendChild(sourceList);
+    async function startCamera(deviceId) {
+        try {
+            localStream = await navigator.mediaDevices.getUserMedia({
+                video: { deviceId: { exact: deviceId } },
+                audio: false,
+            });
 
-        sources.forEach((source) => {
-            const listItem = document.createElement('li');
+            initPeerConnection();
 
-            const button = document.createElement('button');
-            button.textContent = source.name;
-            button.onclick = async () => {
-                // Notify main process that screen sharing has started
-                ipcRenderer.send('start-screen-share');
+            localStream.getTracks().forEach((track) => {
+                console.log('Adding track to peer connection:', track);
+                peerConnection.addTrack(track, localStream);
+            });
 
-                // Capture the selected screen using getUserMedia in the renderer
-                document.getElementById('liveFeed').srcObject = await navigator.mediaDevices.getUserMedia({
-                    video: {
-                        mandatory: {
-                            chromeMediaSource: 'desktop',
-                            chromeMediaSourceId: source.id
-                        }
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+
+            console.log('Sending offer:', peerConnection.localDescription);
+            window.electronAPI.sendSignalingMessage({
+                type: 'offer',
+                sdp: peerConnection.localDescription.sdp
+            });
+        } catch (error) {
+            console.error('Error starting camera:', error);
+        }
+    }
+
+    async function stopCamera() {
+        if (localStream) {
+            localStream.getTracks().forEach(track => track.stop());
+            localStream = null;
+        }
+        if (peerConnection) {
+            peerConnection.close();
+            peerConnection = null;
+        }
+    }
+
+    async function startScreenShare(screenId) {
+        try {
+            const sources = await window.electronAPI.invoke('get-sources');
+            const source = sources.find(s => s.id === screenId);
+            if (!source) {
+                console.error('Screen source not found');
+                return;
+            }
+
+            localStream = await navigator.mediaDevices.getUserMedia({
+                audio: false,
+                video: {
+                    mandatory: {
+                        chromeMediaSource: 'desktop',
+                        chromeMediaSourceId: source.id,
+                    },
+                },
+            });
+
+            initPeerConnection();
+
+            localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+
+            window.electronAPI.sendSignalingMessage({
+                type: 'offer',
+                sdp: peerConnection.localDescription.sdp
+            });
+        } catch (error) {
+            console.error('Error starting screen share:', error);
+        }
+    }
+
+    async function stopScreenShare() {
+        if (localStream) {
+            localStream.getTracks().forEach(track => track.stop());
+            localStream = null;
+        }
+        if (peerConnection) {
+            peerConnection.close();
+            peerConnection = null;
+        }
+    }
+
+    async function handleSignalingMessage(data) {
+        if (data.type === 'get-cameras') {
+            await getCameraList();
+        } else if (data.type === 'get-screens') {
+            await getScreenList();
+        } else if (data.type === 'start-camera') {
+            await startCamera(data.deviceId);
+        } else if (data.type === 'stop-camera') {
+            await stopCamera();
+        } else if (data.type === 'start-screen-share') {
+            await startScreenShare(data.screenId);
+        } else if (data.type === 'stop-screen-share') {
+            await stopScreenShare();
+        } else if (data.type === 'answer') {
+            if (peerConnection) {
+                try {
+                    console.log('Received answer:', data.sdp);
+                    //create RTCSessionDescriptionInit object from received sdp
+                    //and set it as remote description
+                    const answerDescription = {
+                        type: 'answer',
+                        sdp: data.sdp,
+                    };
+
+                    console.log('Peer connection state in answer part:', peerConnection.signalingState);
+
+                    if (peerConnection.signalingState === 'have-local-offer') {
+                        await peerConnection.setRemoteDescription(new RTCSessionDescription(answerDescription));
+                    } else {
+                        console.error('Invalid signaling state for setting remote description:', peerConnection.signalingState);
                     }
-                });
-
-                // Remove the source list after selection
-                sourceList.remove();
-            };
-
-            listItem.appendChild(button);
-            sourceList.appendChild(listItem);
-        });
-    } catch (error) {
-        console.error('Screen sharing failed:', error);
-        alert('Screen sharing failed. Please make sure you have permission.');
+                }
+                catch (e) {
+                    console.error('Error setting remote description', e);
+                }
+            }
+        } else if (data.type === 'ice-candidate') {
+            if (data.candidate && peerConnection) {
+                try {
+                    console.log('Adding ICE candidate:', data.candidate);
+                    await peerConnection.addIceCandidate(data.candidate);
+                } catch (e) {
+                    console.error('Error adding received ICE candidate', e);
+                }
+            }
+        } else if (data.type === 'mouse-move') {
+            // Forward remote control commands to main process
+            window.electronAPI.sendMouseMove(data.x, data.y);
+        } else if (data.type === 'mouse-click') {
+            window.electronAPI.sendMouseClick(data.button);
+        } else if (data.type === 'key-press') {
+            window.electronAPI.sendKeyPress(data.key);
+        }
     }
-});
 
-document.getElementById('stopStream').addEventListener('click', () => {
-    const stream = document.getElementById('liveFeed').srcObject;
-    if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-    }
-    document.getElementById('liveFeed').srcObject = null;
-
-    // Notify main process that screen sharing has stopped
-    ipcRenderer.send('stop-screen-share');
-});
-
-// Event listeners to capture user interactions on the live feed
-document.getElementById('liveFeed').addEventListener('mousedown', (event) => {
-    const rect = event.target.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
-    ipcRenderer.send('mouse-click', { x, y });
-    console.log('Mouse click:', x, y);
-});
-
-document.getElementById('liveFeed').addEventListener('mousemove', (event) => {
-    const rect = event.target.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
-    ipcRenderer.send('mouse-move', { x, y });
-    console.log('Mouse move:', x, y);
-});
-
-document.addEventListener('keydown', (event) => {
-    ipcRenderer.send('key-press', { key: event.key });
-    console.log('Key press:', event.key);
-});
+    // Listen for signaling messages from the main process
+    window.electronAPI.onSignalingMessage(handleSignalingMessage);
+})();

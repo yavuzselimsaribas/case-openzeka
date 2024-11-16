@@ -1,30 +1,40 @@
 <template>
   <v-app>
+    <!-- Toolbar -->
+    <v-app-bar app color="primary" dark>
+      <v-toolbar-title>Remote Access Application</v-toolbar-title>
+    </v-app-bar>
+
     <v-main>
       <v-container>
-        <!-- USB Camera Component -->
-        <UsbCamera />
-
-        <!-- Remote Desktop Component -->
-        <RemoteDesktop />
+        <v-row>
+          <v-col cols="12" md="6">
+            <!-- USB Camera Component -->
+            <CameraComponent />
+          </v-col>
+          <v-col cols="12" md="6">
+            <!-- Remote Desktop Component -->
+            <RemoteDesktopComponent />
+          </v-col>
+        </v-row>
       </v-container>
     </v-main>
   </v-app>
 </template>
 
 <script>
-import UsbCamera from './components/UsbCamera.vue';
-import RemoteDesktop from './components/RemoteDesktop.vue';
+import CameraComponent from './components/CameraComponent.vue';
+import RemoteDesktopComponent from './components/RemoteDesktopComponent.vue';
 
 export default {
   name: 'App',
   components: {
-    UsbCamera,
-    RemoteDesktop,
+    CameraComponent,
+    RemoteDesktopComponent,
   },
 };
 </script>
 
 <style>
-/* Global styles can be added here if needed */
+/* Optional global styles for App */
 </style>
