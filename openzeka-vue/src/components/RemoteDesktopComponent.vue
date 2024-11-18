@@ -37,8 +37,9 @@
             style="width: 100%; border: 1px solid #ccc; cursor: crosshair;"
             @mousemove="handleMouseMove"
             @click="handleMouseClick"
-            @dblclick="toggleFullscreen"
+            @dblclick="handleMouseDoubleClick"
             @wheel="handleMouseWheel"
+            @contextmenu.prevent="handleMouseClick"
         ></video>
       </v-responsive>
     </v-card-actions>
@@ -108,6 +109,15 @@ export default defineComponent({
 
       const button = event.button === 2 ? "right" : "left";
       webrtcClient.value?.sendMouseClick(button);
+    };
+
+    const handleMouseDoubleClick = (event: MouseEvent) => {
+      if (!isScreenSharing.value) return; // Skip if screen sharing is not active
+
+      event.preventDefault(); // Prevent default actions like context menu
+
+      const button = event.button === 2 ? "right" : "left";
+      webrtcClient.value?.sendMouseClick(button, true);
 
       if (videoElement.value) {
         videoElement.value.focus(); // Ensure the video element is focused
@@ -118,8 +128,14 @@ export default defineComponent({
       if (!isScreenSharing.value) return; // Skip if screen sharing is not active
 
       event.preventDefault(); // Prevent default actions like backspace navigation
-      console.log("Key pressed:", event.key);
-      webrtcClient.value?.sendKeyPress(event.key);
+
+      const modifiers = [];
+      if (event.ctrlKey) modifiers.push("ctrl");
+      if (event.altKey) modifiers.push("alt");
+      if (event.shiftKey) modifiers.push("shift");
+      if (event.metaKey) modifiers.push("command");
+
+      webrtcClient.value?.sendKeyPress(event.key, modifiers);
     };
 
     const handleMouseWheel = (event: WheelEvent) => {
@@ -128,7 +144,7 @@ export default defineComponent({
       event.preventDefault(); // Prevent default actions like scrolling
 
       const deltaX = event.deltaX;
-      const deltaY = event.deltaY;
+      const deltaY = - event.deltaY;
       webrtcClient.value?.sendMouseScroll(deltaX, deltaY);
     };
 
@@ -192,7 +208,8 @@ export default defineComponent({
       handleMouseClick,
       toggleFullscreen,
       sharedScreen,
-      handleMouseWheel
+      handleMouseWheel,
+      handleMouseDoubleClick
     };
   },
 });

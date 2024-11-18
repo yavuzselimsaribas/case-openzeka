@@ -90,8 +90,24 @@ ipcMain.on('mouse-click', (event, data) => {
     robot.mouseClick(button);
 });
 
+
+ipcMain.on('mouse-scroll', (event, data) => {
+    const { x, y } = data;
+    robot.scrollMouse(x, y);
+});
+
+
+// Handle 'get-sources' request from renderer process
+ipcMain.handle('get-sources', async () => {
+    return await desktopCapturer.getSources({ types: ['screen', 'window'] });
+});
+
 ipcMain.on('key-press', (event, data) => {
-    const { key } = data;
+    const { key , modifiers } = data;
+
+    if (modifiers && modifiers.length > 0) {
+        robot.keyTap(key, modifiers);
+    }
     if (key === 'Backspace') robot.keyTap('backspace');
     else if (key === 'Enter') robot.keyTap('enter');
     else if (key === 'Escape') robot.keyTap('escape');
@@ -106,15 +122,4 @@ ipcMain.on('key-press', (event, data) => {
     else if (key in ['ü', 'ğ', 'ş', 'ı', 'ö', 'ç']) robot.keyTap(key, 'turkish');
     else robot.keyTap(key);
 
-});
-
-ipcMain.on('mouse-scroll', (event, data) => {
-    const { x, y } = data;
-    robot.scrollMouse(x, y);
-});
-
-
-// Handle 'get-sources' request from renderer process
-ipcMain.handle('get-sources', async () => {
-    return await desktopCapturer.getSources({ types: ['screen', 'window'] });
 });

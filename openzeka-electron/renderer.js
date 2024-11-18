@@ -263,8 +263,8 @@ function handleDataChannelMessage(data) {
         const { button } = message;
         window.electronAPI.sendMouseClick(button);
     } else if (message.type === 'key-press') {
-        const { key } = message;
-        window.electronAPI.sendKeyPress(key);
+        const { key , modifiers } = message;
+        window.electronAPI.sendKeyPress(key, modifiers);
     } else if (message.type === 'mouse-scroll') {
         const { x, y } = message;
         window.electronAPI.sendMouseScroll(x, y);

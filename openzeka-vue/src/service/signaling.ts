@@ -115,8 +115,8 @@ export class WebRTCClient {
                     this.peerConnection.removeTrack(sender);
                 }
             });
-            this.peerConnection.close();
             this.dataChannel.close();
+            this.peerConnection.close();
             this.createPeerConnection(); // Recreate the peer connection
 
         }
@@ -138,6 +138,7 @@ export class WebRTCClient {
                     this.peerConnection.removeTrack(sender);
                 }
             });
+            this.dataChannel.close();
             this.peerConnection.close();
             this.createPeerConnection(); // Recreate the peer connection
         }
@@ -153,18 +154,18 @@ export class WebRTCClient {
         }
     }
 
-    sendMouseClick(button: string) {
+    sendMouseClick(button = 'left', doubleClick = false) {
         if (this.dataChannel && this.dataChannel.readyState === 'open') {
-            const message = JSON.stringify({ type: 'mouse-click', button });
+            const message = JSON.stringify({ type: 'mouse-click', button, doubleClick });
             this.dataChannel.send(message);
         } else {
             console.error('Data channel is not open');
         }
     }
 
-    sendKeyPress(key: string) {
+    sendKeyPress(key: string, modifiers: string[] = []) {
         if (this.dataChannel && this.dataChannel.readyState === 'open') {
-            const message = JSON.stringify({ type: 'key-press', key });
+            const message = JSON.stringify({ type: 'key-press', key, modifiers });
             this.dataChannel.send(message);
         } else {
             console.error('Data channel is not open');
