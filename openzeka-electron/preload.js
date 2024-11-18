@@ -16,11 +16,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     // Remote control
     sendMouseMove: (x, y) => ipcRenderer.send('mouse-move', { x, y }),
-    sendMouseDown: (button, x, y) => ipcRenderer.send("mouse-down", { button, x, y }),
-    sendMouseUp: (button, x, y) => ipcRenderer.send("mouse-up", { button, x, y }),
     sendMouseClick: (button) => ipcRenderer.send('mouse-click', { button }),
-    sendKeyPress: (key, modifiers) => ipcRenderer.send('key-press', { key, modifiers }),
-    sendMouseScroll: (x, y) => ipcRenderer.send('mouse-scroll', { x, y }),
+    sendKeyPress: (key) => ipcRenderer.send('key-press', { key }),
 
     // IPC methods
     send: (channel, data) => ipcRenderer.send(channel, data),

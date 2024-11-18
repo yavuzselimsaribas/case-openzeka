@@ -86,43 +86,13 @@ ipcMain.on('mouse-move', (event, data) => {
 });
 
 ipcMain.on('mouse-click', (event, data) => {
-    const { button = 'left', doubleClick = false } = data;
-    robot.mouseClick(button, doubleClick);
+    const { button = 'left' } = data;
+    robot.mouseClick(button);
 });
 
 ipcMain.on('key-press', (event, data) => {
-    const { key, modifiers } = data;
-    if (modifiers && modifiers.length > 0) {
-        robot.keyTap(key, modifiers);
-    } else {
-        if (key === ' ') robot.keyTap('space');
-        else if (key === 'Enter') robot.keyTap('enter');
-        else if (key === 'Tab') robot.keyTap('tab');
-        else if (key === 'Backspace') robot.keyTap('backspace');
-        else if (key === 'Escape') robot.keyTap('escape');
-        else if (key === 'ArrowUp') robot.keyTap('up');
-        else if (key === 'ArrowDown') robot.keyTap('down');
-        else if (key === 'ArrowLeft') robot.keyTap('left');
-        else if (key === 'ArrowRight') robot.keyTap('right');
-        else robot.keyTap(key);
-    }
-});
-
-ipcMain.on("mouse-down", (event, data) => {
-    const { button = "left", x, y } = data;
-    robot.moveMouse(x, y); // Ensure the mouse is at the correct position
-    robot.mouseToggle("down", button);
-});
-
-ipcMain.on("mouse-up", (event, data) => {
-    const { button = "left", x, y } = data;
-    robot.moveMouse(x, y); // Ensure the mouse is at the correct position
-    robot.mouseToggle("up", button);
-});
-
-ipcMain.on('mouse-scroll', (event, data) => {
-    const { x, y } = data; // x and y represent the scroll amounts
-    robot.scrollMouse(x, y);
+    const { key } = data;
+    robot.keyTap(key);
 });
 
 // Handle 'get-sources' request from renderer process
