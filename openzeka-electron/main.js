@@ -92,8 +92,27 @@ ipcMain.on('mouse-click', (event, data) => {
 
 ipcMain.on('key-press', (event, data) => {
     const { key } = data;
-    robot.keyTap(key);
+    if (key === 'Backspace') robot.keyTap('backspace');
+    else if (key === 'Enter') robot.keyTap('enter');
+    else if (key === 'Escape') robot.keyTap('escape');
+    else if (key === 'ArrowUp') robot.keyTap('up');
+    else if (key === 'ArrowDown') robot.keyTap('down');
+    else if (key === 'ArrowLeft') robot.keyTap('left');
+    else if (key === 'ArrowRight') robot.keyTap('right');
+    else if (key === 'Tab') robot.keyTap('tab');
+    else if (key === 'Shift') robot.keyTap('shift');
+    else if (key === 'Control') robot.keyTap('control');
+    else if (key === 'Alt') robot.keyTap('alt');
+    else if (key in ['ü', 'ğ', 'ş', 'ı', 'ö', 'ç']) robot.keyTap(key, 'turkish');
+    else robot.keyTap(key);
+
 });
+
+ipcMain.on('mouse-scroll', (event, data) => {
+    const { x, y } = data;
+    robot.scrollMouse(x, y);
+});
+
 
 // Handle 'get-sources' request from renderer process
 ipcMain.handle('get-sources', async () => {

@@ -3,22 +3,24 @@
 (async function() {
     let peerConnections = {};
     let localStreams = {};
+
     const configuration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
     function initPeerConnection(id) {
         const peerConnection = new RTCPeerConnection(configuration);
 
-        const dataChannel = peerConnection.createDataChannel('remote-control');
-        dataChannel.onopen = () => {
-            console.log(`Data channel opened for ${id}`);
-        };
-        dataChannel.onmessage = (event) => {
-            console.log(`Received data channel message on ${id}:`, event.data);
-            handleDataChannelMessage(event.data);
-        };
-
-        peerConnection.dataChannel = dataChannel;
-
+        const isInitiator = id === 'camera' || id === 'screen';
+        if (isInitiator) {
+            const dataChannel = peerConnection.createDataChannel('remote-control');
+            dataChannel.onopen = () => {
+                console.log(`Data channel opened for ${id}`);
+            };
+            dataChannel.onmessage = (event) => {
+                console.log(`Received data channel message on ${id}:`, event.data);
+                handleDataChannelMessage(event.data);
+            };
+            peerConnection.dataChannel = dataChannel;
+        }
 
         peerConnection.onicecandidate = ({ candidate }) => {
             if (candidate) {
@@ -178,6 +180,9 @@
                     peerConnections[id].removeTrack(sender);
                 }
             });
+
+            peerConnections[id].close();
+            delete peerConnections[id];
         }
     }
 
@@ -260,7 +265,11 @@ function handleDataChannelMessage(data) {
     } else if (message.type === 'key-press') {
         const { key } = message;
         window.electronAPI.sendKeyPress(key);
-    } else {
+    } else if (message.type === 'mouse-scroll') {
+        const { x, y } = message;
+        window.electronAPI.sendMouseScroll(x, y);
+    }
+    else {
         console.log('Unknown data channel message type:', message.type);
     }
 }

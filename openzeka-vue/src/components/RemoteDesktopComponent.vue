@@ -38,6 +38,7 @@
             @mousemove="handleMouseMove"
             @click="handleMouseClick"
             @dblclick="toggleFullscreen"
+            @wheel="handleMouseWheel"
         ></video>
       </v-responsive>
     </v-card-actions>
@@ -99,10 +100,15 @@ export default defineComponent({
       webrtcClient.value?.sendMouseMove(x, y);
     };
 
-    const handleMouseClick = () => {
+    const handleMouseClick = (event: MouseEvent) => {
+
       if (!isScreenSharing.value) return; // Skip if screen sharing is not active
 
-      webrtcClient.value?.sendMouseClick("left");
+      event.preventDefault(); // Prevent default actions like context menu
+
+      const button = event.button === 2 ? "right" : "left";
+      webrtcClient.value?.sendMouseClick(button);
+
       if (videoElement.value) {
         videoElement.value.focus(); // Ensure the video element is focused
       }
@@ -115,6 +121,17 @@ export default defineComponent({
       console.log("Key pressed:", event.key);
       webrtcClient.value?.sendKeyPress(event.key);
     };
+
+    const handleMouseWheel = (event: WheelEvent) => {
+      if (!isScreenSharing.value) return; // Skip if screen sharing is not active
+
+      event.preventDefault(); // Prevent default actions like scrolling
+
+      const deltaX = event.deltaX;
+      const deltaY = event.deltaY;
+      webrtcClient.value?.sendMouseScroll(deltaX, deltaY);
+    };
+
 
     const toggleFullscreen = () => {
       if (videoElement.value) {
@@ -174,7 +191,8 @@ export default defineComponent({
       handleMouseMove,
       handleMouseClick,
       toggleFullscreen,
-      sharedScreen
+      sharedScreen,
+      handleMouseWheel
     };
   },
 });

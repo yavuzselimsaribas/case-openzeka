@@ -116,6 +116,7 @@ export class WebRTCClient {
                 }
             });
             this.peerConnection.close();
+            this.dataChannel.close();
             this.createPeerConnection(); // Recreate the peer connection
 
         }
@@ -164,6 +165,15 @@ export class WebRTCClient {
     sendKeyPress(key: string) {
         if (this.dataChannel && this.dataChannel.readyState === 'open') {
             const message = JSON.stringify({ type: 'key-press', key });
+            this.dataChannel.send(message);
+        } else {
+            console.error('Data channel is not open');
+        }
+    }
+
+    sendMouseScroll(x: number, y: number) {
+        if (this.dataChannel && this.dataChannel.readyState === 'open') {
+            const message = JSON.stringify({ type: 'mouse-scroll', x, y });
             this.dataChannel.send(message);
         } else {
             console.error('Data channel is not open');
