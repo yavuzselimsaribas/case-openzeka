@@ -14,7 +14,8 @@
             item-value="deviceId"
             label="Select a Camera"
         ></v-select>
-        <v-btn @click="startCamera" color="success" class="mr-2 mt-2">
+        <v-btn @click="startCamera" color="success" class="mr-2 mt-2"
+                :disabled="isCameraSharing && sharedCamera === selectedCamera">
           Start Camera
         </v-btn>
         <v-btn @click="stopCamera" color="error" class="mt-2">
@@ -42,14 +43,24 @@ export default defineComponent({
     const cameras = ref<Array<{ deviceId: string; label: string }>>([]);
     const selectedCamera = ref<string>('');
     const videoElement = ref<HTMLVideoElement | null>(null);
+    const sharedCamera = ref<string>('');
+    const isCameraSharing = ref(false);
 
     const getCameraList = () => {
       webrtcClient.value?.requestCameraList();
     };
 
     const startCamera = () => {
+      //if there is a camera started already, first stop it if it is not the same care as the selected one
+      if (isCameraSharing.value && sharedCamera.value !== selectedCamera.value) {
+        stopCamera();
+      } else if (isCameraSharing.value && sharedCamera.value === selectedCamera.value) {
+        return;
+      }
       if (selectedCamera.value) {
         webrtcClient.value?.startCamera(selectedCamera.value);
+        sharedCamera.value = selectedCamera.value;
+        isCameraSharing.value = true;
       } else {
         alert('Please select a camera');
       }
@@ -61,6 +72,7 @@ export default defineComponent({
         (videoElement.value.srcObject as MediaStream).getTracks().forEach((track) => track.stop());
         videoElement.value.srcObject = null;
       }
+      isCameraSharing.value = false;
     };
 
     onMounted(() => {
@@ -102,6 +114,8 @@ export default defineComponent({
       cameras,
       selectedCamera,
       videoElement,
+      isCameraSharing,
+      sharedCamera
     };
   },
 });

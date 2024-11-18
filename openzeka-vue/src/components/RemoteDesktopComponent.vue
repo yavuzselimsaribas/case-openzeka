@@ -14,7 +14,8 @@
             item-value="id"
             label="Select a Screen"
         ></v-select>
-        <v-btn @click="startScreenShare" color="success" class="mr-2 mt-2">
+        <v-btn @click="startScreenShare" color="success" class="mr-2 mt-2"
+               :disabled = "isScreenSharing && sharedScreen === selectedScreen">
           Start Screen Share
         </v-btn>
         <v-btn @click="stopScreenShare" color="error" class="mr-2 mt-2">
@@ -56,15 +57,23 @@ export default defineComponent({
     const selectedScreen = ref<string>("");
     const videoElement = ref<HTMLVideoElement | null>(null);
     const isScreenSharing = ref(false); // Track screen share status
+    const sharedScreen = ref<string>("");
 
     const getScreenList = () => {
       webrtcClient.value?.requestScreenList();
     };
 
     const startScreenShare = () => {
+      //if there is a screen started already, first stop it if it is not the same care as the selected one
+      if (isScreenSharing.value && sharedScreen.value !== selectedScreen.value) {
+        stopScreenShare();
+      } else if (isScreenSharing.value && sharedScreen.value === selectedScreen.value) {
+        return;
+      }
       if (selectedScreen.value) {
         webrtcClient.value?.startScreenShare(selectedScreen.value);
         isScreenSharing.value = true; // Mark screen share as active
+        sharedScreen.value = selectedScreen.value;
       } else {
         alert("Please select a screen");
       }
@@ -165,6 +174,7 @@ export default defineComponent({
       handleMouseMove,
       handleMouseClick,
       toggleFullscreen,
+      sharedScreen
     };
   },
 });

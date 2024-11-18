@@ -5,6 +5,7 @@ export class WebRTCClient {
     onRemoteStream: ((stream: MediaStream) => void) | null = null;
     onCameraList: ((cameras: Array<{ deviceId: string; label: string }>) => void) | null = null;
     onScreenList: ((screens: Array<{ id: string; name: string }>) => void) | null = null;
+    dataChannel!: RTCDataChannel;
     id: string;
 
     constructor(signalingServerUrl: string, id: string) {
@@ -22,6 +23,18 @@ export class WebRTCClient {
     createPeerConnection() {
         this.peerConnection = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
 
+
+        this.peerConnection.ondatachannel = (event) => {
+            const dataChannel = event.channel;
+            dataChannel.onopen = () => {
+                console.log(`Data channel opened for ${this.id}`);
+            };
+            dataChannel.onmessage = (event) => {
+                console.log(`Received data channel message on ${this.id}:`, event.data);
+                this.handleDataChannelMessage(event.data);
+            };
+            this.dataChannel = dataChannel;
+        }
         this.peerConnection.onicecandidate = (event) => {
             if (event.candidate) {
                 this.signalingServer.send(JSON.stringify({ type: 'ice-candidate', id: this.id, candidate: event.candidate }));
@@ -91,7 +104,21 @@ export class WebRTCClient {
     }
 
     stopCamera() {
-        this.signalingServer.send(JSON.stringify({ type: 'stop-camera', id: this.id }));
+        // set remoteStream to null to stop the camera
+        this.remoteStream = null;
+        this.signalingServer.send(JSON.stringify({type: 'stop-camera', id: this.id}));
+
+        // Reset peer connection state
+        if (this.peerConnection) {
+            this.peerConnection.getSenders().forEach((sender) => {
+                if (sender.track && sender.track.kind === 'video') {
+                    this.peerConnection.removeTrack(sender);
+                }
+            });
+            this.peerConnection.close();
+            this.createPeerConnection(); // Recreate the peer connection
+
+        }
     }
 
     startScreenShare(screenId: string) {
@@ -99,18 +126,51 @@ export class WebRTCClient {
     }
 
     stopScreenShare() {
+        // set remoteStream to null to stop the screen share
+        this.remoteStream = null;
         this.signalingServer.send(JSON.stringify({ type: 'stop-screen-share', id: this.id }));
+
+        // Reset peer connection state
+        if (this.peerConnection) {
+            this.peerConnection.getSenders().forEach((sender) => {
+                if (sender.track && sender.track.kind === 'video') {
+                    this.peerConnection.removeTrack(sender);
+                }
+            });
+            this.peerConnection.close();
+            this.createPeerConnection(); // Recreate the peer connection
+        }
+
     }
 
     sendMouseMove(x: number, y: number) {
-        this.signalingServer.send(JSON.stringify({ type: 'mouse-move', id: this.id, x, y }));
+        if (this.dataChannel && this.dataChannel.readyState === 'open') {
+            const message = JSON.stringify({ type: 'mouse-move', x, y });
+            this.dataChannel.send(message);
+        } else {
+            console.error('Data channel is not open');
+        }
     }
 
     sendMouseClick(button: string) {
-        this.signalingServer.send(JSON.stringify({ type: 'mouse-click', id: this.id, button }));
+        if (this.dataChannel && this.dataChannel.readyState === 'open') {
+            const message = JSON.stringify({ type: 'mouse-click', button });
+            this.dataChannel.send(message);
+        } else {
+            console.error('Data channel is not open');
+        }
     }
 
     sendKeyPress(key: string) {
-        this.signalingServer.send(JSON.stringify({ type: 'key-press', id: this.id, key }));
+        if (this.dataChannel && this.dataChannel.readyState === 'open') {
+            const message = JSON.stringify({ type: 'key-press', key });
+            this.dataChannel.send(message);
+        } else {
+            console.error('Data channel is not open');
+        }
+    }
+
+    handleDataChannelMessage(data: string) {
+        console.log(`Data channel message received: ${data}`);
     }
 }

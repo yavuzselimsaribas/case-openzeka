@@ -8,6 +8,18 @@
     function initPeerConnection(id) {
         const peerConnection = new RTCPeerConnection(configuration);
 
+        const dataChannel = peerConnection.createDataChannel('remote-control');
+        dataChannel.onopen = () => {
+            console.log(`Data channel opened for ${id}`);
+        };
+        dataChannel.onmessage = (event) => {
+            console.log(`Received data channel message on ${id}:`, event.data);
+            handleDataChannelMessage(event.data);
+        };
+
+        peerConnection.dataChannel = dataChannel;
+
+
         peerConnection.onicecandidate = ({ candidate }) => {
             if (candidate) {
                 console.log(`Sending ICE candidate from renderer to main for ${id}:`, candidate);
@@ -50,12 +62,23 @@
     async function startCamera(deviceId) {
         const id = 'camera'; // Unique identifier for the camera stream
         try {
+
+            //if already using camera, stop it
+            if (localStreams[id]) {
+                console.log('Stopping current camera stream before starting new one');
+                await stopCamera();
+            }
             localStreams[id] = await navigator.mediaDevices.getUserMedia({
                 video: { deviceId: { exact: deviceId } },
                 audio: false,
             });
 
+            if (peerConnections[id]) {
+                peerConnections[id].close();
+                delete peerConnections[id];
+            }
             initPeerConnection(id);
+
 
             localStreams[id].getTracks().forEach((track) => {
                 console.log(`Adding track to peer connection ${id}:`, track);
@@ -83,6 +106,11 @@
             delete localStreams[id];
         }
         if (peerConnections[id]) {
+            //remove tracks from peer connection
+            peerConnections[id].getSenders().forEach(sender => {
+                peerConnections[id].removeTrack(sender);
+            });
+
             peerConnections[id].close();
             delete peerConnections[id];
         }
@@ -91,12 +119,19 @@
     async function startScreenShare(screenId) {
         const id = 'screen'; // Unique identifier for the screen share
         try {
+
+            //if already sharing screen, stop it
+            if (localStreams[id]) {
+                console.log('Stopping current screen share before starting new one');
+                await stopScreenShare();
+            }
             const sources = await window.electronAPI.invoke('get-sources');
             const source = sources.find(s => s.id === screenId);
             if (!source) {
                 console.error('Screen source not found');
                 return;
             }
+
 
             localStreams[id] = await navigator.mediaDevices.getUserMedia({
                 audio: false,
@@ -108,7 +143,10 @@
                 },
             });
 
-            initPeerConnection(id);
+            if (!peerConnections[id]) {
+                initPeerConnection(id);
+            }
+
 
             localStreams[id].getTracks().forEach(track => peerConnections[id].addTrack(track, localStreams[id]));
 
@@ -133,8 +171,13 @@
             delete localStreams[id];
         }
         if (peerConnections[id]) {
-            peerConnections[id].close();
-            delete peerConnections[id];
+
+            //remove tracks from peer connection using removeTrack
+            peerConnections[id].getSenders().forEach((sender) => {
+                if (sender.track && sender.track.kind === 'video') {
+                    peerConnections[id].removeTrack(sender);
+                }
+            });
         }
     }
 
@@ -190,16 +233,35 @@
             } else {
                 console.error(`No peer connection found for ${id} when adding ICE candidate`);
             }
-        } else if (data.type === 'mouse-move') {
-            // Forward remote control commands to main process
-            window.electronAPI.sendMouseMove(data.x, data.y);
-        } else if (data.type === 'mouse-click') {
-            window.electronAPI.sendMouseClick(data.button);
-        } else if (data.type === 'key-press') {
-            window.electronAPI.sendKeyPress(data.key);
         }
     }
 
     // Listen for signaling messages from the main process
     window.electronAPI.onSignalingMessage(handleSignalingMessage);
 })();
+
+
+function handleDataChannelMessage(data) {
+    // Parse the JSON message
+    let message;
+    try {
+        message = JSON.parse(data);
+    } catch (e) {
+        console.error('Error parsing data channel message:', e);
+        return;
+    }
+
+    if (message.type === 'mouse-move') {
+        const { x, y } = message;
+        window.electronAPI.sendMouseMove(x, y);
+    } else if (message.type === 'mouse-click') {
+        const { button } = message;
+        window.electronAPI.sendMouseClick(button);
+    } else if (message.type === 'key-press') {
+        const { key } = message;
+        window.electronAPI.sendKeyPress(key);
+    } else {
+        console.log('Unknown data channel message type:', message.type);
+    }
+}
+
