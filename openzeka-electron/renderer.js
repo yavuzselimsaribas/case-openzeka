@@ -8,16 +8,17 @@
     function initPeerConnection(id) {
         const peerConnection = new RTCPeerConnection(configuration);
 
-        const dataChannel = peerConnection.createDataChannel('remote-control');
-        dataChannel.onopen = () => {
-            console.log(`Data channel opened for ${id}`);
-        };
-        dataChannel.onmessage = (event) => {
-            console.log(`Received data channel message on ${id}:`, event.data);
-            handleDataChannelMessage(event.data);
-        };
+        let isInitiator = id === 'screen' || id === 'camera';
 
-        peerConnection.dataChannel = dataChannel;
+        if (isInitiator) {
+            const dataChannel = peerConnection.createDataChannel('remote-control');
+            setupDataChannel(id, dataChannel);
+        } else {
+            peerConnection.ondatachannel = (event) => {
+                const dataChannel = event.channel;
+                setupDataChannel(id, dataChannel);
+            };
+        }
 
 
         peerConnection.onicecandidate = ({ candidate }) => {
@@ -77,6 +78,7 @@
                 peerConnections[id].close();
                 delete peerConnections[id];
             }
+
             initPeerConnection(id);
 
 
@@ -111,6 +113,10 @@
                 peerConnections[id].removeTrack(sender);
             });
 
+            if (peerConnections[id].dataChannel) {
+                peerConnections[id].dataChannel.close();
+            }
+
             peerConnections[id].close();
             delete peerConnections[id];
         }
@@ -120,11 +126,8 @@
         const id = 'screen'; // Unique identifier for the screen share
         try {
 
-            //if already sharing screen, stop it
-            if (localStreams[id]) {
-                console.log('Stopping current screen share before starting new one');
-                await stopScreenShare();
-            }
+            await stopScreenShare();
+
             const sources = await window.electronAPI.invoke('get-sources');
             const source = sources.find(s => s.id === screenId);
             if (!source) {
@@ -143,9 +146,7 @@
                 },
             });
 
-            if (!peerConnections[id]) {
-                initPeerConnection(id);
-            }
+            initPeerConnection(id);
 
 
             localStreams[id].getTracks().forEach(track => peerConnections[id].addTrack(track, localStreams[id]));
@@ -238,34 +239,59 @@
 
     // Listen for signaling messages from the main process
     window.electronAPI.onSignalingMessage(handleSignalingMessage);
+
+    function setupDataChannel(id, dataChannel) {
+        dataChannel.onopen = () => {
+            console.log(`Data channel opened for ${id}`);
+        };
+        dataChannel.onmessage = (event) => {
+            console.log(`Received data channel message on ${id}:`, event.data);
+            handleDataChannelMessage(event.data);
+        };
+        dataChannel.onclose = () => {
+            console.log(`Data channel closed for ${id}`);
+        };
+        dataChannel.onerror = (error) => {
+            console.error(`Data channel error for ${id}:`, error);
+        };
+
+        // Store the data channel
+        peerConnections[id].dataChannel = dataChannel;
+    }
+
+
+    function handleDataChannelMessage(data) {
+        // Parse the JSON message
+        let message;
+        try {
+            message = JSON.parse(data);
+        } catch (e) {
+            console.error('Error parsing data channel message:', e);
+            return;
+        }
+
+        if (message.type === 'mouse-move') {
+            const { x, y } = message;
+            window.electronAPI.sendMouseMove(x, y);
+        }else if (message.type === "mouse-down") {
+            window.electronAPI.sendMouseDown(message.button, message.x, message.y);
+        } else if (message.type === "mouse-up") {
+            window.electronAPI.sendMouseUp(message.button, message.x, message.y);
+        } else if (message.type === 'mouse-click') {
+            const { button } = message;
+            window.electronAPI.sendMouseClick(button);
+        } else if (message.type === 'key-press') {
+            window.electronAPI.sendKeyPress(message.key, message.modifiers);
+        } else if (message.type === 'mouse-scroll') {
+            window.electronAPI.sendMouseScroll(message.x, message.y);
+        }
+        else {
+            console.log('Unknown data channel message type:', message.type);
+        }
+    }
+
+
 })();
 
 
-function handleDataChannelMessage(data) {
-    // Parse the JSON message
-    let message;
-    try {
-        message = JSON.parse(data);
-    } catch (e) {
-        console.error('Error parsing data channel message:', e);
-        return;
-    }
-
-    if (message.type === 'mouse-move') {
-        const { x, y } = message;
-        window.electronAPI.sendMouseMove(x, y);
-    } else if (message.type === 'mouse-click') {
-        const { button } = message;
-        window.electronAPI.sendMouseClick(button);
-    } else if (message.type === 'key-press') {
-        window.electronAPI.sendKeyPress(message.key, message.modifiers);
-    } else if (message.type === 'key-type') {
-        window.electronAPI.sendKeyType(message.text);
-    }else if (message.type === 'mouse-scroll') {
-        window.electronAPI.sendMouseScroll(message.x, message.y);
-    }
-    else {
-        console.log('Unknown data channel message type:', message.type);
-    }
-}
 

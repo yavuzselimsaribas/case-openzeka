@@ -5,7 +5,7 @@ export class WebRTCClient {
     onRemoteStream: ((stream: MediaStream) => void) | null = null;
     onCameraList: ((cameras: Array<{ deviceId: string; label: string }>) => void) | null = null;
     onScreenList: ((screens: Array<{ id: string; name: string }>) => void) | null = null;
-    dataChannel!: RTCDataChannel;
+    dataChannel: RTCDataChannel | null = null;
     id: string;
 
     constructor(signalingServerUrl: string, id: string) {
@@ -26,14 +26,7 @@ export class WebRTCClient {
 
         this.peerConnection.ondatachannel = (event) => {
             const dataChannel = event.channel;
-            dataChannel.onopen = () => {
-                console.log(`Data channel opened for ${this.id}`);
-            };
-            dataChannel.onmessage = (event) => {
-                console.log(`Received data channel message on ${this.id}:`, event.data);
-                this.handleDataChannelMessage(event.data);
-            };
-            this.dataChannel = dataChannel;
+            this.setupDataChannel(dataChannel);
         }
         this.peerConnection.onicecandidate = (event) => {
             if (event.candidate) {
@@ -130,6 +123,10 @@ export class WebRTCClient {
         this.remoteStream = null;
         this.signalingServer.send(JSON.stringify({ type: 'stop-screen-share', id: this.id }));
 
+        if (this.dataChannel) {
+            this.dataChannel.close();
+            this.dataChannel = null;
+        }
         // Reset peer connection state
         if (this.peerConnection) {
             this.peerConnection.getSenders().forEach((sender) => {
@@ -141,6 +138,7 @@ export class WebRTCClient {
             this.createPeerConnection(); // Recreate the peer connection
         }
 
+
     }
 
     sendMouseMove(x: number, y: number) {
@@ -151,6 +149,35 @@ export class WebRTCClient {
             console.error('Data channel is not open');
         }
     }
+
+    sendMouseDown(button: string, x: number, y: number) {
+        if (this.dataChannel && this.dataChannel.readyState === "open") {
+            const message = JSON.stringify({
+                type: "mouse-down",
+                button,
+                x,
+                y,
+            });
+            this.dataChannel.send(message);
+        } else {
+            console.error("Data channel is not open");
+        }
+    }
+
+    sendMouseUp(button: string, x: number, y: number) {
+        if (this.dataChannel && this.dataChannel.readyState === "open") {
+            const message = JSON.stringify({
+                type: "mouse-up",
+                button,
+                x,
+                y,
+            });
+            this.dataChannel.send(message);
+        } else {
+            console.error("Data channel is not open");
+        }
+    }
+
 
     sendMouseClick(button = 'left', doubleClick = false) {
         if (this.dataChannel && this.dataChannel.readyState === 'open') {
@@ -170,15 +197,6 @@ export class WebRTCClient {
         }
     }
 
-    sendKeyType(text: string) {
-        if (this.dataChannel && this.dataChannel.readyState === 'open') {
-            const message = JSON.stringify({ type: 'key-type', text });
-            this.dataChannel.send(message);
-        } else {
-            console.error('Data channel is not open');
-        }
-    }
-
     sendMouseScroll(deltaX: number, deltaY: number) {
         if (this.dataChannel && this.dataChannel.readyState === 'open') {
             const message = JSON.stringify({ type: 'mouse-scroll', x: deltaX, y: deltaY });
@@ -190,5 +208,23 @@ export class WebRTCClient {
 
     handleDataChannelMessage(data: string) {
         console.log(`Data channel message received: ${data}`);
+    }
+
+    setupDataChannel(dataChannel: RTCDataChannel) {
+        dataChannel.onopen = () => {
+            console.log(`Data channel opened for ${this.id}`);
+        };
+        dataChannel.onmessage = (event) => {
+            console.log(`Received data channel message on ${this.id}:`, event.data);
+            this.handleDataChannelMessage(event.data);
+        };
+        dataChannel.onclose = () => {
+            console.log(`Data channel closed for ${this.id}`);
+        };
+        dataChannel.onerror = (error) => {
+            console.error(`Data channel error for ${this.id}:`, error);
+        };
+
+        this.dataChannel = dataChannel;
     }
 }

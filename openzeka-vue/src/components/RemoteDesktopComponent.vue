@@ -36,6 +36,8 @@
             tabindex="0"
             style="width: 100%; border: 1px solid #ccc; cursor: crosshair;"
             @mousemove="handleMouseMove"
+            @mousedown="handleMouseDown"
+            @mouseup="handleMouseUp"
             @click="handleMouseClick"
             @dblclick="handleMouseDoubleClick"
             @contextmenu.prevent="handleMouseClick"
@@ -60,6 +62,7 @@ export default defineComponent({
     const videoElement = ref<HTMLVideoElement | null>(null);
     const isScreenSharing = ref(false); // Track screen share status
     const sharedScreen = ref<string>("");
+    const isMouseDown = ref(false);
 
     const getScreenList = () => {
       webrtcClient.value?.requestScreenList();
@@ -84,6 +87,7 @@ export default defineComponent({
     const stopScreenShare = () => {
       webrtcClient.value?.stopScreenShare();
       isScreenSharing.value = false; // Mark screen share as inactive
+      sharedScreen.value = "";
       if (videoElement.value && videoElement.value.srcObject) {
         (videoElement.value.srcObject as MediaStream).getTracks().forEach((track) =>
             track.stop()
@@ -92,17 +96,44 @@ export default defineComponent({
       }
     };
 
+    const handleMouseDown = (event: MouseEvent) => {
+      if (!isScreenSharing.value) return;
+
+      isMouseDown.value = true;
+      const rect = (event.target as HTMLVideoElement).getBoundingClientRect();
+      const x = ((event.clientX - rect.left) / rect.width) * 1920;
+      const y = ((event.clientY - rect.top) / rect.height) * 1080;
+
+      const button = event.button === 2 ? "right" : "left";
+      webrtcClient.value?.sendMouseDown(button, x, y);
+    };
+
+    const handleMouseUp = (event: MouseEvent) => {
+      if (!isScreenSharing.value) return;
+
+      isMouseDown.value = false;
+      const rect = (event.target as HTMLVideoElement).getBoundingClientRect();
+      const x = ((event.clientX - rect.left) / rect.width) * 1920;
+      const y = ((event.clientY - rect.top) / rect.height) * 1080;
+
+      const button = event.button === 2 ? "right" : "left";
+      webrtcClient.value?.sendMouseUp(button, x, y);
+    };
+
     const handleMouseMove = (event: MouseEvent) => {
-      if (!isScreenSharing.value) return; // Skip if screen sharing is not active
+      if (!isScreenSharing.value) return;
 
       const rect = (event.target as HTMLVideoElement).getBoundingClientRect();
-      const x = ((event.clientX - rect.left) / rect.width) * 1920; // Adjust for resolution
+      const x = ((event.clientX - rect.left) / rect.width) * 1920;
       const y = ((event.clientY - rect.top) / rect.height) * 1080;
+
       webrtcClient.value?.sendMouseMove(x, y);
     };
 
     const handleMouseClick = (event: MouseEvent) => {
       if (!isScreenSharing.value) return;
+
+      event.preventDefault();
 
       const button = event.button === 2 ? 'right' : 'left'; // 0: left, 2: right
       webrtcClient.value?.sendMouseClick(button);
@@ -121,19 +152,12 @@ export default defineComponent({
       event.preventDefault();
 
       const key = event.key;
-
-      // For special characters or text input
-      if (key.length === 1 || key === 'Enter' || key === 'Backspace') {
-        webrtcClient.value?.sendKeyType(key);
-      } else {
-        const modifiers = [];
-        if (event.ctrlKey) modifiers.push('control');
-        if (event.shiftKey) modifiers.push('shift');
-        if (event.altKey) modifiers.push('alt');
-        if (event.metaKey) modifiers.push('command'); // For Mac OS
-
-        webrtcClient.value?.sendKeyPress(key, modifiers);
-      }
+      const modifiers = [];
+      if (event.ctrlKey) modifiers.push('control');
+      if (event.shiftKey) modifiers.push('shift');
+      if (event.altKey) modifiers.push('alt');
+      if (event.metaKey) modifiers.push('command'); // For Mac OS
+      webrtcClient.value?.sendKeyPress(key, modifiers);
     };
 
     const handleMouseWheel = (event: WheelEvent) => {
@@ -208,7 +232,9 @@ export default defineComponent({
       handleMouseWheel,
       toggleFullscreen,
       sharedScreen,
-      handleMouseDoubleClick
+      handleMouseDoubleClick,
+      handleMouseDown,
+      handleMouseUp,
     };
   },
 });

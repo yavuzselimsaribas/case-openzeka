@@ -91,18 +91,33 @@ ipcMain.on('mouse-click', (event, data) => {
 });
 
 ipcMain.on('key-press', (event, data) => {
-    const { key, modifiers } = data; // modifiers is an array, e.g., ['control', 'shift']
-
+    const { key, modifiers } = data;
     if (modifiers && modifiers.length > 0) {
         robot.keyTap(key, modifiers);
     } else {
-        robot.keyTap(key);
+        if (key === ' ') robot.keyTap('space');
+        else if (key === 'Enter') robot.keyTap('enter');
+        else if (key === 'Tab') robot.keyTap('tab');
+        else if (key === 'Backspace') robot.keyTap('backspace');
+        else if (key === 'Escape') robot.keyTap('escape');
+        else if (key === 'ArrowUp') robot.keyTap('up');
+        else if (key === 'ArrowDown') robot.keyTap('down');
+        else if (key === 'ArrowLeft') robot.keyTap('left');
+        else if (key === 'ArrowRight') robot.keyTap('right');
+        else robot.keyTap(key);
     }
 });
 
-ipcMain.on('key-type', (event, data) => {
-    const { text } = data; // The text to type
-    robot.typeString(text);
+ipcMain.on("mouse-down", (event, data) => {
+    const { button = "left", x, y } = data;
+    robot.moveMouse(x, y); // Ensure the mouse is at the correct position
+    robot.mouseToggle("down", button);
+});
+
+ipcMain.on("mouse-up", (event, data) => {
+    const { button = "left", x, y } = data;
+    robot.moveMouse(x, y); // Ensure the mouse is at the correct position
+    robot.mouseToggle("up", button);
 });
 
 ipcMain.on('mouse-scroll', (event, data) => {
