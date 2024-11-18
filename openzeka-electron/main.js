@@ -86,13 +86,28 @@ ipcMain.on('mouse-move', (event, data) => {
 });
 
 ipcMain.on('mouse-click', (event, data) => {
-    const { button = 'left' } = data;
-    robot.mouseClick(button);
+    const { button = 'left', doubleClick = false } = data;
+    robot.mouseClick(button, doubleClick);
 });
 
 ipcMain.on('key-press', (event, data) => {
-    const { key } = data;
-    robot.keyTap(key);
+    const { key, modifiers } = data; // modifiers is an array, e.g., ['control', 'shift']
+
+    if (modifiers && modifiers.length > 0) {
+        robot.keyTap(key, modifiers);
+    } else {
+        robot.keyTap(key);
+    }
+});
+
+ipcMain.on('key-type', (event, data) => {
+    const { text } = data; // The text to type
+    robot.typeString(text);
+});
+
+ipcMain.on('mouse-scroll', (event, data) => {
+    const { x, y } = data; // x and y represent the scroll amounts
+    robot.scrollMouse(x, y);
 });
 
 // Handle 'get-sources' request from renderer process

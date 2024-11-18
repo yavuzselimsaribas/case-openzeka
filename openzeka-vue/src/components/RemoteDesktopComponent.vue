@@ -37,7 +37,9 @@
             style="width: 100%; border: 1px solid #ccc; cursor: crosshair;"
             @mousemove="handleMouseMove"
             @click="handleMouseClick"
-            @dblclick="toggleFullscreen"
+            @dblclick="handleMouseDoubleClick"
+            @contextmenu.prevent="handleMouseClick"
+            @wheel="handleMouseWheel"
         ></video>
       </v-responsive>
     </v-card-actions>
@@ -99,21 +101,51 @@ export default defineComponent({
       webrtcClient.value?.sendMouseMove(x, y);
     };
 
-    const handleMouseClick = () => {
-      if (!isScreenSharing.value) return; // Skip if screen sharing is not active
+    const handleMouseClick = (event: MouseEvent) => {
+      if (!isScreenSharing.value) return;
 
-      webrtcClient.value?.sendMouseClick("left");
-      if (videoElement.value) {
-        videoElement.value.focus(); // Ensure the video element is focused
-      }
+      const button = event.button === 2 ? 'right' : 'left'; // 0: left, 2: right
+      webrtcClient.value?.sendMouseClick(button);
+    };
+
+    const handleMouseDoubleClick = (event: MouseEvent) => {
+      if (!isScreenSharing.value) return;
+
+      const button = event.button === 2 ? 'right' : 'left';
+      webrtcClient.value?.sendMouseClick(button, true);
     };
 
     const handleKeypress = (event: KeyboardEvent) => {
-      if (!isScreenSharing.value) return; // Skip if screen sharing is not active
+      if (!isScreenSharing.value) return;
 
-      event.preventDefault(); // Prevent default actions like backspace navigation
-      console.log("Key pressed:", event.key);
-      webrtcClient.value?.sendKeyPress(event.key);
+      event.preventDefault();
+
+      const key = event.key;
+
+      // For special characters or text input
+      if (key.length === 1 || key === 'Enter' || key === 'Backspace') {
+        webrtcClient.value?.sendKeyType(key);
+      } else {
+        const modifiers = [];
+        if (event.ctrlKey) modifiers.push('control');
+        if (event.shiftKey) modifiers.push('shift');
+        if (event.altKey) modifiers.push('alt');
+        if (event.metaKey) modifiers.push('command'); // For Mac OS
+
+        webrtcClient.value?.sendKeyPress(key, modifiers);
+      }
+    };
+
+    const handleMouseWheel = (event: WheelEvent) => {
+      if (!isScreenSharing.value) return;
+
+      // Prevent the default scrolling behavior
+      event.preventDefault();
+
+      const deltaX = event.deltaX;
+      const deltaY = event.deltaY;
+
+      webrtcClient.value?.sendMouseScroll(deltaX, deltaY);
     };
 
     const toggleFullscreen = () => {
@@ -173,8 +205,10 @@ export default defineComponent({
       isScreenSharing,
       handleMouseMove,
       handleMouseClick,
+      handleMouseWheel,
       toggleFullscreen,
-      sharedScreen
+      sharedScreen,
+      handleMouseDoubleClick
     };
   },
 });

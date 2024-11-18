@@ -152,18 +152,36 @@ export class WebRTCClient {
         }
     }
 
-    sendMouseClick(button: string) {
+    sendMouseClick(button = 'left', doubleClick = false) {
         if (this.dataChannel && this.dataChannel.readyState === 'open') {
-            const message = JSON.stringify({ type: 'mouse-click', button });
+            const message = JSON.stringify({ type: 'mouse-click', button, doubleClick });
             this.dataChannel.send(message);
         } else {
             console.error('Data channel is not open');
         }
     }
 
-    sendKeyPress(key: string) {
+    sendKeyPress(key: string, modifiers: string[] = []) {
         if (this.dataChannel && this.dataChannel.readyState === 'open') {
-            const message = JSON.stringify({ type: 'key-press', key });
+            const message = JSON.stringify({ type: 'key-press', key, modifiers });
+            this.dataChannel.send(message);
+        } else {
+            console.error('Data channel is not open');
+        }
+    }
+
+    sendKeyType(text: string) {
+        if (this.dataChannel && this.dataChannel.readyState === 'open') {
+            const message = JSON.stringify({ type: 'key-type', text });
+            this.dataChannel.send(message);
+        } else {
+            console.error('Data channel is not open');
+        }
+    }
+
+    sendMouseScroll(deltaX: number, deltaY: number) {
+        if (this.dataChannel && this.dataChannel.readyState === 'open') {
+            const message = JSON.stringify({ type: 'mouse-scroll', x: deltaX, y: deltaY });
             this.dataChannel.send(message);
         } else {
             console.error('Data channel is not open');

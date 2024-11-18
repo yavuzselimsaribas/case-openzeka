@@ -258,9 +258,13 @@ function handleDataChannelMessage(data) {
         const { button } = message;
         window.electronAPI.sendMouseClick(button);
     } else if (message.type === 'key-press') {
-        const { key } = message;
-        window.electronAPI.sendKeyPress(key);
-    } else {
+        window.electronAPI.sendKeyPress(message.key, message.modifiers);
+    } else if (message.type === 'key-type') {
+        window.electronAPI.sendKeyType(message.text);
+    }else if (message.type === 'mouse-scroll') {
+        window.electronAPI.sendMouseScroll(message.x, message.y);
+    }
+    else {
         console.log('Unknown data channel message type:', message.type);
     }
 }
